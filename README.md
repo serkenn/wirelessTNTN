@@ -54,6 +54,42 @@ A: SEアプレットの開発・テスト、NFCタグとSEの統合、非接触I
 - 開発者向け。ブートローダーアンロックやARA-M書き換え可能な開発用SIMカードが必要な場合があります。
 - Android 14以前ではObserveモード非対応。
 
+## 既知の制約
+
+### AIDは「全部」を登録できない
+AndroidのAIDフィルタは5バイト以上でなければならず（`CardEmulation.isValidAid`）、`A0*` のような
+ワイルドカードは登録できません。そのため本アプリは
+
+- `res/xml/apduservice.xml` に**SE開発用の最小限のAID**（GlobalPlatform ISD、USIM/ISIM、PKCS#15、
+  FIDO、NDEF、プロプライエタリF0系）を静的に宣言し、
+- それ以外は画面上の「Routed AIDs」欄から `CardEmulation.registerAidsForService()` で
+  **実行時に登録**
+
+する構成です。動的登録は同カテゴリの静的宣言を置き換えるため、欄に入力したリストが常に完全な
+リストになります。
+
+### 決済AIDと既定の決済アプリの衝突
+決済AID（`A000000003*` など）を category=other で宣言したアプリは、NFC設定が
+「既定を常に使用」の端末では `setPreferredService()` を拒否されます
+（AOSP `PreferredServices.isForegroundAllowedLocked`）。拒否されるとポーリングフレームも
+APDUも一切届きません。
+
+そのため決済AIDは既定リストから外し、UIの「+ Payment」ボタンで**任意追加**にしています。
+追加して動かない場合は、NFC設定の既定の支払いを「他のアプリが開いているときを除く」に変更するか、
+決済AIDを外してください。失敗時はログとトーストで通知します。
+
+### Observeモードの解除は即時にはできない
+`NfcService.setObserveMode()` はHCEトランザクション中や、呼び出し元がpreferred service でない
+場合に **false を返して何もしません**。しかも前者はリーダーにかざしっぱなしの間ずっと続くため、
+回数や時間で打ち切ると「Observeモードがoffのまま残る」という一番危険な状態になります。
+
+そのため本アプリは、AOSPと同じ2秒の遅延で再有効化を開始したあと、
+**セッションが生きている限り最大2秒間隔でリトライし続けます**（15秒以上解決しない場合のみ
+警告をログに1回出します）。加えて、
+
+- `onResume` でpreferred serviceを取り直した直後に再表明（`ACTION_REASSERT_OBSERVE_MODE`）
+- リーダー検知後にトランザクションが始まらなかった場合は10秒でObserveモードへ復帰
+
 ## ライセンス
 This project is licensed under the [ANAL-Tight](https://github.com/AokiApp/ANAL/blob/main/licenses/ANAL-Tight-1.0.1.md) License.
 

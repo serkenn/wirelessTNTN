@@ -14,24 +14,43 @@ android {
         versionName "1.0"
     }
 
+    buildFeatures {
+        // AppLog defaults payload masking to off in debug builds and on in release builds.
+        buildConfig true
+    }
+
     buildTypes {
         release {
             minifyEnabled false
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-}
 
-// Exclude split kotlin-stdlib jdk7/jdk8 artifacts that conflict with kotlin-stdlib >= 1.8
-configurations.all {
-    exclude group: "org.jetbrains.kotlin", module: "kotlin-stdlib-jdk7"
-    exclude group: "org.jetbrains.kotlin", module: "kotlin-stdlib-jdk8"
+    lint {
+        // Warnings are informative here; errors are not allowed to reach main.
+        abortOnError true
+        warningsAsErrors false
+        checkReleaseBuilds true
+    }
+
+    testOptions {
+        unitTests {
+            // android.util.Log and friends are stubs in unit tests; return defaults instead of
+            // throwing so the pure-logic classes can be exercised on the JVM.
+            returnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.annotation:annotation:1.9.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    // Mockito 5's inline mock maker is required: android.se.omapi.Session and Channel are final.
+    testImplementation 'org.mockito:mockito-core:5.14.2'
 }

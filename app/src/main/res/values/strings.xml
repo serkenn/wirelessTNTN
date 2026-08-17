@@ -7,4 +7,21 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="log_label">Log</string>
+
+    <string name="aid_label">Routed AIDs</string>
+    <string name="aid_hint">A000000151*\nD276000085*</string>
+    <string name="aid_apply">Register</string>
+    <string name="aid_defaults">Defaults</string>
+    <string name="aid_payment">+ Payment</string>
+    <string name="aids_registered">Registered %1$d AIDs</string>
+    <string name="mask_payloads">Mask APDU payloads in the log</string>
+
+    <string name="error_no_nfc">This device has no usable NFC adapter</string>
+    <string name="error_nfc_disabled">NFC is turned off; enable it in system settings</string>
+    <string name="error_no_se">No Secure Element reader available</string>
+    <string name="error_no_valid_aids">No valid AID in the list</string>
+    <string name="error_aid_registration">AID registration was refused by the NFC service</string>
+    <string name="error_preferred_service">Could not become the preferred NFC service. If a
+        default payment app is installed, set NFC payment to \"except when another app is
+        open\", or remove the payment AIDs from the list.</string>
 </resources>

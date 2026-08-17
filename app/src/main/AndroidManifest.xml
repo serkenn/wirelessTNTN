@@ -5,8 +5,11 @@
 
     <uses-feature android:name="android.hardware.nfc.hce" android:required="true" />
 
+    <!-- Nothing here is worth backing up, and APDU logs certainly are not. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"
         android:theme="@style/Theme.WirelessTNTN">
 
