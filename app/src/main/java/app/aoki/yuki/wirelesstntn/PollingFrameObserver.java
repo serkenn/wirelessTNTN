@@ -1,17 +1,26 @@
 package app.aoki.yuki.wirelesstntn;
 
-import android.annotation.SuppressLint;
 import android.nfc.cardemulation.PollingFrame;
 
 import java.util.List;
 
-// PollingFrame API requires minSdk 35
-@SuppressLint("NewApi")
+/**
+ * Classifies the polling frames delivered while observe mode is on.
+ *
+ * Frames arrive in batches, several times per second while a reader's field is present, so the
+ * service is told about edges (field on/off, first ISO-DEP poll) rather than about every frame.
+ */
 public class PollingFrameObserver {
 
     public interface Callback {
+        /** An ISO-DEP (type A/B) reader is polling: the transaction may be accepted. */
         void onReaderDetected();
-        void onFrameLog(String description);
+
+        /** The reader's field appeared. */
+        void onFieldOn();
+
+        /** The reader's field disappeared. */
+        void onFieldOff();
     }
 
     private final Callback callback;
@@ -21,28 +30,40 @@ public class PollingFrameObserver {
     }
 
     public void onPollingFrames(List<PollingFrame> frames) {
+        if (frames == null) {
+            return;
+        }
         for (PollingFrame frame : frames) {
             int type = frame.getType();
-            String typeStr = pollingFrameTypeToString(type);
-            String desc = "PollingFrame type=" + typeStr;
-            AppLog.d(desc);
-            callback.onFrameLog(desc);
+            AppLog.d("PollingFrame type=" + typeToString(type));
 
-            if (type == PollingFrame.POLLING_LOOP_TYPE_A ||
-                type == PollingFrame.POLLING_LOOP_TYPE_B) {
-                AppLog.i("PollingFrameObserver: ISO-DEP reader detected");
-                callback.onReaderDetected();
+            switch (type) {
+                case PollingFrame.POLLING_LOOP_TYPE_ON:
+                    callback.onFieldOn();
+                    break;
+                case PollingFrame.POLLING_LOOP_TYPE_OFF:
+                    callback.onFieldOff();
+                    break;
+                case PollingFrame.POLLING_LOOP_TYPE_A:
+                case PollingFrame.POLLING_LOOP_TYPE_B:
+                    callback.onReaderDetected();
+                    break;
+                default:
+                    // Type F and unknown frames are logged only: this passthrough speaks ISO-DEP.
+                    break;
             }
         }
     }
 
-    private static String pollingFrameTypeToString(int type) {
-        if (type == PollingFrame.POLLING_LOOP_TYPE_A) return "TYPE_A";
-        if (type == PollingFrame.POLLING_LOOP_TYPE_B) return "TYPE_B";
-        if (type == PollingFrame.POLLING_LOOP_TYPE_F) return "TYPE_F";
-        if (type == PollingFrame.POLLING_LOOP_TYPE_ON) return "ON";
-        if (type == PollingFrame.POLLING_LOOP_TYPE_OFF) return "OFF";
-        if (type == PollingFrame.POLLING_LOOP_TYPE_UNKNOWN) return "UNKNOWN";
-        return "0x" + Integer.toHexString(type);
+    static String typeToString(int type) {
+        switch (type) {
+            case PollingFrame.POLLING_LOOP_TYPE_A: return "A";
+            case PollingFrame.POLLING_LOOP_TYPE_B: return "B";
+            case PollingFrame.POLLING_LOOP_TYPE_F: return "F";
+            case PollingFrame.POLLING_LOOP_TYPE_ON: return "ON";
+            case PollingFrame.POLLING_LOOP_TYPE_OFF: return "OFF";
+            case PollingFrame.POLLING_LOOP_TYPE_UNKNOWN: return "UNKNOWN";
+            default: return "0x" + Integer.toHexString(type);
+        }
     }
 }

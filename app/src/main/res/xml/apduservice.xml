@@ -1,65 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Observer Mode configuration.
+    Observe mode configuration.
 
-    shouldDefaultToObserveMode="true" tells the NFC system this service prefers observe mode.
-    When this service is the preferred foreground service, the system enables observe mode
-    automatically. Polling frames are delivered via processPollingFrames(); the service then
-    calls NfcAdapter.setObserveModeEnabled(false) to exit observe mode and accept a transaction.
+    shouldDefaultToObserveMode="true" tells the NFC system this service prefers observe mode, so
+    the stack enables it whenever this service is the preferred foreground service.  Polling
+    frames then arrive via processPollingFrames(); the service calls
+    NfcAdapter.setObserveModeEnabled(false) exactly once per field session, and only after the
+    OMAPI session is ready, to let a transaction through.
 
-    All AID routing is handled here as static configuration.  No dynamic AID registration is
-    performed at runtime: Observer Mode is the primary gate — every NFC polling frame arrives
-    via processPollingFrames() regardless of AID.  The service exits observe mode only when
-    the OMAPI session is ready, and only then does the NFC stack need to route an incoming
-    SELECT command to this service.  The SE itself decides per-AID whether to accept the
-    transaction (session.openLogicalChannel returns null when the SE rejects the AID).
+    About the AID list below.
 
-    The aid-group below covers the major ISO 7816 application families found on Secure Elements:
-      A0 xx xx xx xx  – ISO-registered application identifiers (payment, transit, identity …)
-      F0 xx xx xx xx  – Proprietary application identifiers
+    Android has no catch-all AID filter: CardEmulation.isValidAid() requires at least five bytes,
+    so "A0*" cannot be registered.  What is declared here is therefore only a baseline of Secure
+    Element development AIDs; anything else the developer needs is registered at runtime from the
+    activity via CardEmulation.registerAidsForService() (see AidRegistry).  A dynamic group
+    replaces the static group of the same category, so the runtime list is always the complete
+    one.
 
-    Safety: this service remains in observe mode (firmware does not respond to readers) unless
-    setObserveModeEnabled(false) is explicitly called.  That call only occurs when both
-    (a) the user has pressed Start and (b) the OMAPI session is established.  Therefore these
-    static AID registrations never interfere with other installed payment or transit apps when
-    this app is not in an active passthrough session.
+    Payment RIDs (A000000003* and friends) are deliberately absent.  AOSP
+    PreferredServices.isForegroundAllowedLocked() refuses preferred-service registration to a
+    foreground service whose category-other AIDs collide with the default payment app when the
+    NFC setting is "use default: always" — which would silently break the entire app on any
+    phone with a wallet installed.  They are available as an opt-in preset in the UI instead.
 
-    See ref_aosp/kormax_demo/apduservice.xml for the pattern.
-    See ref_aosp/NfcNci/src/com/android/nfc/cardemulation/HostEmulationManager.java for
-    how the NFC stack processes observe mode and polling frames.
+    Safety: the service stays in observe mode (the firmware does not answer readers) unless
+    setObserveModeEnabled(false) is called, which happens only when the user has pressed Start,
+    the OMAPI session is established, and an ISO-DEP reader is actually polling.
+
+    See ref_aosp/NfcNci/src/com/android/nfc/cardemulation/HostEmulationManager.java for how the
+    stack processes observe mode and polling frames.
 -->
 <host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/servicedesc"
     android:requireDeviceUnlock="true"
     android:shouldDefaultToObserveMode="true">
 
-    <!-- AID group covering ISO-registered (A0…) and proprietary (F0…) application families.
-         The SE decides per-AID whether to accept a transaction; see ApduPassthroughController. -->
+    <!-- Keep in sync with AidRegistry.DEFAULT_AIDS. -->
     <aid-group android:description="@string/aiddescription" android:category="other">
-        <!-- Payment networks -->
-        <aid-filter android:name="A000000003*"/>  <!-- Visa -->
-        <aid-filter android:name="A000000004*"/>  <!-- Mastercard / Maestro -->
-        <aid-filter android:name="A000000025*"/>  <!-- American Express -->
-        <aid-filter android:name="A000000029*"/>  <!-- American Express (alternate RID) -->
-        <aid-filter android:name="A000000032*"/>  <!-- Visa Electron -->
-        <aid-filter android:name="A000000045*"/>  <!-- Maestro (UK Domestic) -->
-        <aid-filter android:name="A000000065*"/>  <!-- JCB -->
-        <aid-filter android:name="A000000152*"/>  <!-- Discover / Diners Club -->
-        <aid-filter android:name="A000000277*"/>  <!-- Interac -->
-        <aid-filter android:name="A000000333*"/>  <!-- China UnionPay -->
-        <aid-filter android:name="A000000632*"/>  <!-- eftpos Australia -->
-        <aid-filter android:name="A000000658*"/>  <!-- MIR (Russia) -->
-        <aid-filter android:name="A000000724*"/>  <!-- RuPay (India / NPCI) -->
-        <aid-filter android:name="A000000006*"/>  <!-- Bancontact / Mister Cash -->
-        <aid-filter android:name="A000000042*"/>  <!-- Carte Bancaire (CB) -->
-        <aid-filter android:name="A000000172*"/>  <!-- Girocard (Germany) -->
-        <!-- Transit / transport -->
-        <aid-filter android:name="A000000031*"/>  <!-- Visa Transit -->
-        <aid-filter android:name="A000000046*"/>  <!-- Visa Transit (alternate) -->
-        <!-- Proprietary F0 range -->
-        <aid-filter android:name="F000000000*"/>  <!-- Proprietary (F0 00 00 00 00) -->
-        <aid-filter android:name="F000000001*"/>  <!-- Proprietary (F0 00 00 00 01) -->
-        <aid-filter android:name="F000000002*"/>  <!-- Proprietary (F0 00 00 00 02) -->
-        <aid-filter android:name="F000000003*"/>  <!-- Proprietary (F0 00 00 00 03) -->
+        <aid-filter android:name="A000000151*"/>  <!-- GlobalPlatform Issuer Security Domain -->
+        <aid-filter android:name="A000000087*"/>  <!-- 3GPP USIM / ISIM -->
+        <aid-filter android:name="A000000063*"/>  <!-- PKCS#15 -->
+        <aid-filter android:name="A000000647*"/>  <!-- FIDO -->
+        <aid-filter android:name="D276000085*"/>  <!-- NDEF Type 4 Tag -->
+        <aid-filter android:name="F000000000*"/>  <!-- Proprietary -->
+        <aid-filter android:name="F000000001*"/>
+        <aid-filter android:name="F000000002*"/>
+        <aid-filter android:name="F000000003*"/>
     </aid-group>
 </host-apdu-service>
