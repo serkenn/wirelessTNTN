@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name">
+
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="@string/xposed_description" />
+        <!-- 93 is the modern LSPosed baseline. -->
+        <meta-data
+            android:name="xposedminversion"
+            android:value="93" />
+        <!-- Pre-selects the only process worth hooking, so the scope does not have to be hunted
+             for in the manager's app list (com.android.se is a system app and hidden by default). -->
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposedscope" />
+    </application>
+</manifest>
