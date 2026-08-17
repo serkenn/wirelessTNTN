@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ARA-M Bypass</string>
+    <string name="xposed_description">Grants OMAPI APDU access regardless of the Secure Element\'s
+        ARA-M rules, by forcing com.android.se\'s access decision to ALLOWED. Development use.</string>
+
+    <string-array name="xposedscope">
+        <item>com.android.se</item>
+    </string-array>
+</resources>
