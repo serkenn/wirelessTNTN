@@ -45,6 +45,10 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS = "wirelesstntn";
     private static final String KEY_MASK_PAYLOADS = "mask_payloads";
+    private static final String KEY_LAST_READER = "last_reader";
+    private static final String KEY_AUTO_START = "auto_start";
+    /** Fast enough that the status never feels stale while presenting a phone to a reader. */
+    private static final long STATUS_POLL_MS = 700L;
     private static final long SE_CONNECT_TIMEOUT_MS = 5_000L;
 
     private Spinner seSpinner;
@@ -54,8 +58,21 @@ public class MainActivity extends AppCompatActivity {
     private Button defaultAidsButton;
     private Button paymentAidsButton;
     private CheckBox maskPayloadsCheckBox;
+    private CheckBox autoStartCheckBox;
+    private TextView statusText;
+    private Button nfcResetButton;
     private TextView logTextView;
     private ScrollView logScrollView;
+
+    private final android.os.Handler statusHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable statusPoll = new Runnable() {
+        @Override
+        public void run() {
+            renderStatus();
+            statusHandler.postDelayed(this, STATUS_POLL_MS);
+        }
+    };
 
     @Nullable
     private NfcAdapter nfcAdapter;
@@ -79,6 +96,9 @@ public class MainActivity extends AppCompatActivity {
         defaultAidsButton = findViewById(R.id.default_aids_button);
         paymentAidsButton = findViewById(R.id.payment_aids_button);
         maskPayloadsCheckBox = findViewById(R.id.mask_payloads_checkbox);
+        autoStartCheckBox = findViewById(R.id.auto_start_checkbox);
+        statusText = findViewById(R.id.status_text);
+        nfcResetButton = findViewById(R.id.nfc_reset_button);
         logTextView = findViewById(R.id.log_text_view);
         logScrollView = findViewById(R.id.log_scroll_view);
 
@@ -108,6 +128,15 @@ public class MainActivity extends AppCompatActivity {
                 startSession();
             }
         });
+        autoStartCheckBox.setChecked(prefs.getBoolean(KEY_AUTO_START, true));
+        autoStartCheckBox.setOnCheckedChangeListener((v, checked) ->
+                prefs.edit().putBoolean(KEY_AUTO_START, checked).apply());
+
+        // Always offered rather than probed for: KernelSU hides the su binary from apps it has not
+        // granted, so "does /system/bin/su exist" answers no even on a rooted device. Pressing it
+        // and reporting why it failed is more use than hiding it.
+        nfcResetButton.setOnClickListener(v -> restartNfc());
+
         applyAidsButton.setOnClickListener(v -> applyAids(aidEditor.getText().toString()));
         defaultAidsButton.setOnClickListener(
                 v -> aidEditor.setText(AidRegistry.format(AidRegistry.DEFAULT_AIDS)));
@@ -148,11 +177,14 @@ public class MainActivity extends AppCompatActivity {
         } else {
             loadSeReaders();
         }
+        statusHandler.removeCallbacks(statusPoll);
+        statusHandler.post(statusPoll);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        statusHandler.removeCallbacks(statusPoll);
 
         if (isChangingConfigurations()) {
             // Hand the registration back for the moment; onResume() takes it again and the
@@ -205,6 +237,11 @@ public class MainActivity extends AppCompatActivity {
         if (!registerAsPreferredService()) {
             return;
         }
+
+        // Remembered so the next launch comes back to the same Secure Element. Picking up the
+        // wrong one is easy to do and hard to notice: the spinner would otherwise reset to the
+        // first reader, which is the eSE rather than whichever SIM the work is on.
+        prefs.edit().putString(KEY_LAST_READER, readerName).apply();
 
         AppLog.i("MainActivity: starting passthrough on " + readerName);
         sendServiceAction(PassthroughHceService.ACTION_START, readerName);
@@ -316,7 +353,12 @@ public class MainActivity extends AppCompatActivity {
             updateUi();
             return;
         }
+        // Fall back to the remembered reader when this activity instance has no selection yet,
+        // which is every cold start.
         String previous = (String) seSpinner.getSelectedItem();
+        if (previous == null) {
+            previous = prefs.getString(KEY_LAST_READER, null);
+        }
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, names);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -329,6 +371,73 @@ public class MainActivity extends AppCompatActivity {
         }
         AppLog.i("SE readers available: " + names);
         updateUi();
+
+        // Open the app, present the phone, run the reader-side tool: no button press in between.
+        if (autoStartCheckBox.isChecked() && !sessionRequested
+                && !PassthroughHceService.isPassthroughActive()
+                && prefs.getString(KEY_LAST_READER, null) != null) {
+            AppLog.i("MainActivity: auto-starting on the remembered reader");
+            startSession();
+        }
+    }
+
+    /**
+     * Reinitialises the NFC stack so a controller HAL that stopped honouring observe mode starts
+     * again. Root only, opt-in; see {@link NfcHealer}.
+     */
+    private void restartNfc() {
+        boolean wasRunning = sessionRequested || PassthroughHceService.isPassthroughActive();
+        if (wasRunning) {
+            stopSession();
+        }
+        nfcResetButton.setEnabled(false);
+        AppLog.i("MainActivity: restarting NFC through root…");
+        NfcHealer.restartNfc((success, message) -> runOnUiThread(() -> {
+            nfcResetButton.setEnabled(true);
+            if (success) {
+                AppLog.i("MainActivity: " + message);
+            } else {
+                fail(getString(R.string.error_nfc_restart, message));
+            }
+            loadSeReaders();
+        }));
+    }
+
+    /** Renders what the passthrough is doing, in the terms that decide "can I tap now?". */
+    private void renderStatus() {
+        PassthroughHceService.Health health = PassthroughHceService.health();
+        String reader = PassthroughHceService.activeReaderName();
+        if (reader == null) {
+            Object selected = seSpinner.getSelectedItem();
+            reader = selected == null ? "?" : selected.toString();
+        }
+        int color;
+        String text;
+        switch (health) {
+            case READY:
+                color = 0xFF1B8A3A;
+                text = getString(R.string.status_ready, reader);
+                break;
+            case TRANSACTING:
+                color = 0xFF1B6FA8;
+                text = getString(R.string.status_transacting);
+                break;
+            case CONNECTING:
+                color = 0xFF8A6D1B;
+                text = getString(R.string.status_connecting);
+                break;
+            case OBSERVE_MODE_STUCK:
+                color = 0xFFB3261E;
+                text = getString(R.string.status_observe_stuck);
+                break;
+            case STOPPED:
+            default:
+                color = 0xFF666666;
+                text = getString(R.string.status_stopped);
+                break;
+        }
+        statusText.setText(text);
+        statusText.setTextColor(color);
     }
 
     // -------------------------------------------------------------------------------------
@@ -403,6 +512,7 @@ public class MainActivity extends AppCompatActivity {
         applyAidsButton.setEnabled(!running);
         defaultAidsButton.setEnabled(!running);
         paymentAidsButton.setEnabled(!running);
+        renderStatus();
     }
 
     private void fail(String message) {
