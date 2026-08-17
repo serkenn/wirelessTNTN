@@ -100,6 +100,49 @@ public class PassthroughHceService extends HostApduService {
         return service != null && service.active;
     }
 
+    /**
+     * What the passthrough is doing, in the terms that decide whether it is worth presenting a
+     * phone to a reader right now.
+     */
+    public enum Health {
+        /** No session. */
+        STOPPED,
+        /** Session starting; the OMAPI session is not open yet. */
+        CONNECTING,
+        /** In observe mode and silent: present the phone to a reader. */
+        READY,
+        /** Observe mode dropped for a detected reader; a transaction is expected. */
+        TRANSACTING,
+        /**
+         * Observe mode has been refused long enough to be a real problem. The device answers any
+         * reader in this state, and a reader that polls several technologies is liable to latch
+         * onto something other than ISO-DEP.
+         */
+        OBSERVE_MODE_STUCK
+    }
+
+    /** How long a refused observe mode request has to persist before it counts as stuck. */
+    private static final long OBSERVE_MODE_STUCK_AFTER_MS = 4_000L;
+
+    /** Uptime at which the current observe mode request started, or 0 when none is outstanding. */
+    private static volatile long observeModeRequestedAt;
+
+    public static Health health() {
+        PassthroughHceService service = instance;
+        if (service == null || !service.active) {
+            return Health.STOPPED;
+        }
+        if (service.passthroughController == null) {
+            return Health.CONNECTING;
+        }
+        long requestedAt = observeModeRequestedAt;
+        if (requestedAt != 0L
+                && SystemClock.uptimeMillis() - requestedAt >= OBSERVE_MODE_STUCK_AFTER_MS) {
+            return Health.OBSERVE_MODE_STUCK;
+        }
+        return service.transactionAllowed ? Health.TRANSACTING : Health.READY;
+    }
+
     @Nullable
     public static String activeReaderName() {
         PassthroughHceService service = instance;
@@ -381,6 +424,7 @@ public class PassthroughHceService extends HostApduService {
             mainHandler.removeCallbacks(pendingObserveModeTask);
             pendingObserveModeTask = null;
         }
+        observeModeRequestedAt = 0L;
     }
 
     private final class ObserveModeTask implements Runnable {
@@ -406,6 +450,11 @@ public class PassthroughHceService extends HostApduService {
             }
             if (startedAt == 0L) {
                 startedAt = SystemClock.uptimeMillis();
+                if (enable) {
+                    // Only the enable direction is tracked for health(): failing to get back into
+                    // observe mode is what leaves the device answering readers.
+                    observeModeRequestedAt = startedAt;
+                }
             }
             attempt++;
 
@@ -413,6 +462,7 @@ public class PassthroughHceService extends HostApduService {
             if (adapter == null) {
                 AppLog.e("PassthroughHceService: no NFC adapter, cannot set observe mode");
                 pendingObserveModeTask = null;
+                observeModeRequestedAt = 0L;
                 return;
             }
             if (adapter.isObserveModeEnabled() == enable) {
@@ -451,6 +501,7 @@ public class PassthroughHceService extends HostApduService {
             AppLog.i("PassthroughHceService: observe mode " + (enable ? "enabled" : "disabled")
                     + " (" + how + ")");
             pendingObserveModeTask = null;
+            observeModeRequestedAt = 0L;
         }
     }
 

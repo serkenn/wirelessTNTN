@@ -15,6 +15,17 @@
     <string name="aid_payment">+ Payment</string>
     <string name="aids_registered">Registered %1$d AIDs</string>
     <string name="mask_payloads">Mask APDU payloads in the log</string>
+    <string name="auto_start">Start automatically on the last used Secure Element</string>
+    <string name="nfc_restart">Restart NFC (root)</string>
+
+    <string name="status_stopped">STOPPED — press Start</string>
+    <string name="status_connecting">CONNECTING — opening the OMAPI session…</string>
+    <string name="status_ready">READY (%1$s) — present the phone to the reader</string>
+    <string name="status_transacting">TRANSACTING — reader detected, observe mode released</string>
+    <string name="status_observe_stuck">OBSERVE MODE STUCK — the SE answers any reader and a
+        multi-technology reader may latch onto the wrong one. Restart NFC.</string>
+
+    <string name="error_nfc_restart">Could not restart NFC: %1$s</string>
 
     <string name="error_no_nfc">This device has no usable NFC adapter</string>
     <string name="error_nfc_disabled">NFC is turned off; enable it in system settings</string>
