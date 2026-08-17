@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.NoSuchElementException;
 
 /**
  * Domain logic for APDU passthrough.
@@ -56,6 +57,11 @@ public class ApduPassthroughController {
                 return handleSelectByAid(apdu);
             }
             return forwardToCurrentChannel(apdu);
+        } catch (NoSuchElementException e) {
+            // The AID is simply not on this SE. That is an ordinary answer, not a fault — and it
+            // is the common case when probing for applets — so it gets no stack trace.
+            AppLog.d("Passthrough: AID not present on this SE, answering SW=6A82");
+            return ApduStatus.SW_FILE_NOT_FOUND;
         } catch (Throwable t) {
             byte[] sw = ApduStatus.fromThrowable(t);
             AppLog.e("Passthrough: APDU failed, answering SW=" + AppLog.hex(sw), t);

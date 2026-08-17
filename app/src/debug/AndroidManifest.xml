@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only additions. This source set is not part of the release build, so the APDU console
+    cannot exist in a shipped APK.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+            Exported so `adb shell am broadcast` can reach it, but gated on DUMP, which is held by
+            the shell user and not by ordinary apps.  Without that guard this would be an
+            "any installed app can send arbitrary APDUs to the SIM" hole.
+        -->
+        <receiver
+            android:name=".ApduConsoleReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="app.aoki.yuki.wirelesstntn.APDU_CONSOLE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
